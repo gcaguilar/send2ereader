@@ -4,15 +4,11 @@ FROM docker.io/library/node:lts-alpine AS build
 # Create app directory
 WORKDIR /usr/src/app
 
-RUN apk add --no-cache pipx gcc g++ make pkgconf python3-dev py3-pip
+RUN apk add --no-cache gcc g++ make pkgconf
 
 ENV PATH="$PATH:/root/.local/bin"
 
-
 FROM docker.io/library/node:lts-alpine as runtime
-
-# Copy PyMuPDF install
-COPY --from=build /root/.local /root/.local
 
 RUN apk add --no-cache python3
 

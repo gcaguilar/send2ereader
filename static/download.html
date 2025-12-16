@@ -28,7 +28,7 @@
 		<div id="downloads">
 			<br/>
 			<div style="font-size: 1.3em;"><em>Downloads</em></div>
-			<a id="downloadlink" class="downloadlink"></a>
+			<div id="downloadlinks"></div>
 		</div>
 		<div id="urls"></div>
 		<br/>
@@ -50,7 +50,7 @@
 var keyOutput = document.getElementById('keyoutput')
 var keyGenBtn = document.getElementById('keygen')
 var downloads = document.getElementById('downloads')
-var downloadlink = document.getElementById('downloadlink')
+var downloadlinks = document.getElementById('downloadlinks')
 var urlsnode = document.getElementById('urls')
 var siteurl = document.getElementById('siteurl')
 var key = null
@@ -79,10 +79,18 @@ function pollFile () {
 			downloads.style.display = 'none'
 		}
 		var urls = data.urls && data.urls.length > 0 ? data.urls : null
-		if (data.file) {
+		if (data.files && data.files.length > 0) {
 			downloads.style.display = 'block'
-			downloadlink.textContent = data.file.name
-			downloadlink.href = '/' + encodeURIComponent(data.file.name) + "?key=" + key
+			downloadlinks.innerHTML = ''
+			data.files.forEach(function (file) {
+				var downloadlink = document.createElement("a")
+				downloadlink.textContent = file.name
+				downloadlink.href = '/' + encodeURIComponent(file.name) + "?key=" + key
+				downloadlink.className = "downloadlink"
+				var div = document.createElement('div')
+				div.appendChild(downloadlink)
+				downloadlinks.appendChild(div)
+			})
 		} else {
 			downloads.style.display = 'none'
 		}
@@ -110,13 +118,13 @@ function generateKey () {
 		if (x.responseText !== 'error' && x.status === 200) {
 			key = x.responseText
 			keyOutput.textContent = key
-			downloadlink.href = ''
+			downloadlinks.innerHTML = ''
 			if (pollTimer) clearInterval(pollTimer)
 			pollTimer = setInterval(pollFile, 5 * 1000)
 		} else {
 			key = null
 			keyOutput.textContent = '––––'
-			downloadlink.href = ''
+			downloadlinks.innerHTML = ''
 		}
 		keyGenBtn.blur()
 	})

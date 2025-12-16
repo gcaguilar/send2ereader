@@ -53,12 +53,14 @@ function removeKey (key) {
   const info = app.context.keys.get(key)
   if (info) {
     clearTimeout(app.context.keys.get(key).timer)
-    if (info.file) {
-      console.log('Deleting file', info.file.path)
-      fs.unlink(info.file.path, (err) => {
-        if (err) console.error(err)
+    if (info.files && info.files.length > 0) {
+      info.files.forEach(file => {
+        console.log('Deleting file', file.path)
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+        })
       })
-      info.file = null
+      info.files = []
     }
     app.context.keys.delete(key)
   } else {
@@ -106,7 +108,7 @@ const upload = multer({
   }),
   limits: {
     fileSize: maxFileSize,
-    files: 1
+    files: 10
   },
   fileFilter: (req, file, cb) => {
     // Fixes charset
@@ -151,7 +153,7 @@ router.post('/generate', async ctx => {
   const info = {
     created: new Date(),
     agent: agent,
-    file: null,
+    files: [],
     urls: []
   }
   ctx.keys.set(key, info)
@@ -195,7 +197,9 @@ async function downloadFile (ctx, next) {
   const filename = decodeURIComponent(ctx.params.filename)
   const info = ctx.keys.get(key)
 
-  if (!info || !info.file || info.file.name !== filename) {
+  const file = info && info.files ? info.files.find(f => f.name === filename) : null
+  
+  if (!info || !file) {
     await next()
     return
   }
@@ -204,18 +208,18 @@ async function downloadFile (ctx, next) {
     return
   }
   expireKey(key)
-  console.log('Sending file', [info.file.path, info.file.name])
+  console.log('Sending file', [file.path, file.name])
   if (info.agent.includes('Kindle')) {
     // Kindle needs a safe name or it thinks it's an invalid file
-    ctx.attachment(info.file.name)
+    ctx.attachment(file.name)
   }
-  await sendfile(ctx, info.file.path)
+  await sendfile(ctx, file.path)
 }
 
 router.post('/upload', async (ctx, next) => {
 
   try {
-    await upload.single('file')(ctx, () => {})
+    await upload.array('files', 10)(ctx, () => {})
   } catch (err) {
     flash(ctx, {
       message: err,
@@ -231,8 +235,8 @@ router.post('/upload', async (ctx, next) => {
 
   const key = ctx.request.body.key.toUpperCase()
 
-  if (ctx.request.file) {
-    console.log('Uploaded file:', ctx.request.file)
+  if (ctx.request.files && ctx.request.files.length > 0) {
+    console.log('Uploaded files:', ctx.request.files)
   }
 
   if (!ctx.keys.has(key)) {
@@ -240,10 +244,12 @@ router.post('/upload', async (ctx, next) => {
       message: 'Unknown key ' + key,
       success: false
     })
-    if (ctx.request.file) {
-      fs.unlink(ctx.request.file.path, (err) => {
-        if (err) console.error(err)
-        else console.log('Removed file', ctx.request.file.path)
+    if (ctx.request.files && ctx.request.files.length > 0) {
+      ctx.request.files.forEach(file => {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+          else console.log('Removed file', file.path)
+        })
       })
     }
     await next()
@@ -261,246 +267,41 @@ router.post('/upload', async (ctx, next) => {
     }
   }
 
-  let conversion = null
-  let filename = ""
-
-  if (ctx.request.file) {
-    if (ctx.request.file.size === 0) {
-      let data = {
-        message: 'Invalid file submitted (empty file)',
-        success: false,
-        key: key
-      }
-      flash(ctx, data)
-      fs.unlink(ctx.request.file.path, (err) => {
-        if (err) console.error(err)
-        else console.log('Removed file', ctx.request.file.path)
-      })
-      await next()
-      return
-    }
-
-    let mimetype = ctx.request.file.mimetype
-
-    const type = await FileType.fromFile(ctx.request.file.path)
-
-    if (mimetype == "application/octet-stream" && type) {
-      mimetype = type.mime
-    }
-
-    if (mimetype == "application/epub") {
-      mimetype = TYPE_EPUB
-    }
-
-    if ((!type || !allowedTypes.includes(type.mime)) && !allowedTypes.includes(mimetype)) {
-      flash(ctx, {
-        message: 'Uploaded file is of an invalid type: ' + ctx.request.file.originalname + ' (' + (type? type.mime : 'unknown mimetype') + ')',
-        success: false,
-        key: key
-      })
-      fs.unlink(ctx.request.file.path, (err) => {
-        if (err) console.error(err)
-        else console.log('Removed file', ctx.request.file.path)
-      })
-      await next()
-      return
-    }
-
-    let data = null
-    filename = ctx.request.file.originalname
-    if (ctx.request.body.transliteration) {
-      filename = sanitize(doTransliterate(filename))
-    }
-    if (info.agent.includes('Kindle')) {
-      filename = filename.replace(/[^\.\w\-"'\(\)]/g, '_')
-    }
-
-    if (mimetype === TYPE_EPUB && info.agent.includes('Kindle') && ctx.request.body.kindlegen) {
-      // convert to .mobi
-      conversion = 'kindlegen'
-      const outname = ctx.request.file.path.replace(/\.epub$/i, '.mobi')
-      filename = filename.replace(/\.kepub\.epub$/i, '.epub').replace(/\.epub$/i, '.mobi')
-      let stderr = ''
-
-      let p = new Promise((resolve, reject) => {
-        const kindlegen = spawn('kindlegen', [basename(ctx.request.file.path), '-dont_append_source', '-c1', '-o', basename(outname)], {
-          // stdio: 'inherit',
-          cwd: dirname(ctx.request.file.path)
-        })
-        kindlegen.once('error', function (err) {
-          fs.unlink(ctx.request.file.path, (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path)
-          })
-          fs.unlink(ctx.request.file.path.replace(/\.epub$/i, '.mobi8'), (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path.replace(/\.epub$/i, '.mobi8'))
-          })
-          reject('kindlegen error: ' + err)
-        })
-        kindlegen.once('close', (code) => {
-          fs.unlink(ctx.request.file.path, (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path)
-          })
-          fs.unlink(ctx.request.file.path.replace(/\.epub$/i, '.mobi8'), (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path.replace(/\.epub$/i, '.mobi8'))
-          })
-          if (code !== 0 && code !== 1) {
-            reject('kindlegen error code: ' + code + '\n' + stderr)
-            return
-          }
-
-          resolve(outname)
-        })
-        kindlegen.stdout.on('data', function (str) {
-          stderr += str
-          console.log('kindlegen: ' + str)
-        })
-        kindlegen.stderr.on('data', function (str) {
-          stderr += str
-          console.log('kindlegen: ' + str)
-        })
-      })
-      try {
-        data = await p
-      } catch (err) {
-        flash(ctx, {
-          success: false,
-          message: err.replaceAll(basename(ctx.request.file.path), "infile.epub").replaceAll(basename(outname), "outfile.mobi")
-        })
-        return
-      }
-
-    } else if (mimetype === TYPE_EPUB && info.agent.includes('Kobo') && ctx.request.body.kepubify) {
-      // convert to Kobo EPUB
-      conversion = 'kepubify'
-      const outname = ctx.request.file.path.replace(/\.epub$/i, '.kepub.epub')
-      filename = filename.replace(/\.kepub\.epub$/i, '.epub').replace(/\.epub$/i, '.kepub.epub')
-
-      let p = new Promise((resolve, reject) => {
-        let stderr = ''
-        const kepubify = spawn('kepubify', ['-v', '-u', '-o', basename(outname), basename(ctx.request.file.path)], {
-          //stdio: 'inherit',
-          cwd: dirname(ctx.request.file.path)
-        })
-        kepubify.once('error', function (err) {
-          fs.unlink(ctx.request.file.path, (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path)
-          })
-          reject('kepubify error: ' + err)
-        })
-        kepubify.once('close', (code) => {
-          fs.unlink(ctx.request.file.path, (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path)
-          })
-          if (code !== 0) {
-            reject('Kepubify error code: ' + code + '\n' + stderr)
-            return
-          }
-
-          resolve(outname)
-        })
-        kepubify.stdout.on('data', function (str) {
-          stderr += str
-          console.log('kepubify: ' + str)
-        })
-        kepubify.stderr.on('data', function (str) {
-          stderr += str
-          console.log('kepubify: ' + str)
-        })
-      })
-      try {
-        data = await p
-      } catch (err) {
-        flash(ctx, {
-          success: false,
-          message: err.replaceAll(basename(ctx.request.file.path), "infile.epub").replaceAll(basename(outname), "outfile.kepub.epub")
-        })
-        return
-      }
-
-    } else if (mimetype == 'application/pdf' && ctx.request.body.pdfcropmargins) {
-      const dir = dirname(ctx.request.file.path)
-      const base = basename(ctx.request.file.path, '.pdf')
-      const outfile = resolvepath(join(dir, `${base}_cropped.pdf`))
-      let p = new Promise((resolve, reject) => {
-        let stderr = ''
-        const pdfcropmargins = spawn('pdfcropmargins', ['-s', '-u', '-o', outfile, basename(ctx.request.file.path)], {
-          // stdio: 'inherit',
-          cwd: dirname(ctx.request.file.path)
-        })
-        pdfcropmargins.once('error', function (err) {
-          fs.unlink(ctx.request.file.path, (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path)
-          })
-          reject('pdfcropmargins error: ' + err)
-        })
-        pdfcropmargins.once('close', (code) => {
-          fs.unlink(ctx.request.file.path, (err) => {
-            if (err) console.error(err)
-            else console.log('Removed file', ctx.request.file.path)
-          })
-          if (code !== 0) {
-            reject('pdfcropmargins error code: ' + code + '\n' + stderr)
-            return
-          }
-
-          resolve(outfile)
-        })
-        pdfcropmargins.stdout.on('data', function (str) {
-          stderr += str
-          console.log('pdfcropmargins: ' + str)
-        })
-        pdfcropmargins.stderr.on('data', function (str) {
-          stderr += str
-          console.log('pdfcropmargins: ' + str)
-        })
-      })
-      try {
-        data = await p
-      } catch (err) {
-        flash(ctx, {
-          success: false,
-          message: err.replaceAll(basename(ctx.request.file.path), "infile.pdf").replaceAll(outfile, "outfile.pdf")
-        })
-        return
-      }
-
-    } else {
-      // No conversion
-      data = ctx.request.file.path
-      filename = filename.replace(/\.epub$/i, '.epub').replace(/\.pdf$/i, '.pdf')
-    }
-
-    expireKey(key)
-    if (info.file && info.file.path) {
-      await new Promise((resolve, reject) => fs.unlink(info.file.path, (err) => {
-        if (err) return reject(err)
-        else console.log('Removed previously uploaded file', info.file.path)
-        resolve()
-      }))
-    }
-    info.file = {
-      name: filename,
-      path: data,
-      // size: ctx.request.file.size,
-      uploaded: new Date()
-    }
-  }
-
   let messages = []
-  if (ctx.request.file) {
-    ctx.request.file.skip = true
-    messages.push('Upload successful! ' + (conversion ? 'Ebook was converted with ' + conversion + ' and sent' : 'Sent')+' to '+(info.agent.includes('Kobo') ? 'a Kobo device.' : (info.agent.includes('Kindle') ? 'a Kindle device.' : 'a device.')))
-    messages.push('Filename: ' + filename)
+  let processedFiles = []
+
+  if (ctx.request.files && ctx.request.files.length > 0) {
+    for (const file of ctx.request.files) {
+      if (file.size === 0) {
+        console.log('Skipping empty file:', file.originalname)
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+          else console.log('Removed file', file.path)
+        })
+        continue
+      }
+
+      try {
+        const processedFile = await processFile(file, info, ctx)
+        processedFiles.push(processedFile)
+        info.files.push(processedFile)
+        
+        let deviceType = info.agent.includes('Kobo') ? 'a Kobo device.' : (info.agent.includes('Kindle') ? 'a Kindle device.' : 'a device.')
+        let conversionMsg = processedFile.conversion ? ' (converted with ' + processedFile.conversion + ')' : ''
+        messages.push('✓ ' + processedFile.name + conversionMsg)
+        
+      } catch (err) {
+        console.error('Error processing file:', file.originalname, err)
+        messages.push('✗ Error processing ' + file.originalname + ': ' + err.message)
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+        })
+      }
+    }
   }
+
   if (url) {
-    messages.push("Added url: " + url)
+    messages.push("✓ Added url: " + url)
   }
 
   if (messages.length === 0) {
@@ -513,8 +314,11 @@ router.post('/upload', async (ctx, next) => {
     return
   }
 
+  let successMsg = processedFiles.length > 0 ? 
+    `Upload successful! ${processedFiles.length} file(s) sent to ${info.agent.includes('Kobo') ? 'Kobo' : (info.agent.includes('Kindle') ? 'Kindle' : 'device')}:<br/>` : ''
+  
   flash(ctx, {
-    message: messages.join("<br/>"),
+    message: successMsg + messages.join("<br/>"),
     success: true,
     key: key,
     url: url
@@ -523,13 +327,24 @@ router.post('/upload', async (ctx, next) => {
   await next()
 })
 
-router.delete('/file/:key', async ctx => {
+router.delete('/file/:key/:filename', async ctx => {
   const key = ctx.params.key.toUpperCase()
+  const filename = decodeURIComponent(ctx.params.filename)
   const info = ctx.keys.get(key)
   if (!info) {
     ctx.throw(400, 'Unknown key: ' + key)
   }
-  info.file = null
+  
+  const fileIndex = info.files.findIndex(f => f.name === filename)
+  if (fileIndex !== -1) {
+    const file = info.files[fileIndex]
+    fs.unlink(file.path, (err) => {
+      if (err) console.error(err)
+      else console.log('Removed file', file.path)
+    })
+    info.files.splice(fileIndex, 1)
+  }
+  
   ctx.body = 'ok'
 })
 
@@ -550,10 +365,7 @@ router.get('/status/:key', async ctx => {
   // ctx.cookies.set('key', key, {overwrite: true, httpOnly: false, sameSite: 'strict', maxAge: expireDelay * 1000})
   ctx.body = {
     alive: info.alive,
-    file: info.file ? {
-      name: info.file.name,
-      // size: info.file.size
-    } : null,
+    files: info.files ? info.files.map(f => ({name: f.name})) : [],
     urls: info.urls
   }
 })
@@ -567,6 +379,131 @@ router.get('/', async ctx => {
   console.log(ctx.ip, agent)
   await sendfile(ctx, agent.includes('Kobo') || agent.includes('Kindle') || agent.toLowerCase().includes('tolino') || agent.includes('eReader') /*"eReader" is on Tolino*/ ? 'static/download.html' : 'static/upload.html')
 })
+
+async function processFile(file, info, ctx) {
+  let conversion = null
+  let filename = file.originalname
+  
+  if (ctx.request.body.transliteration) {
+    filename = sanitize(doTransliterate(filename))
+  }
+  if (info.agent.includes('Kindle')) {
+    filename = filename.replace(/[^\.\w\-"'\(\)]/g, '_')
+  }
+
+  let mimetype = file.mimetype
+  const type = await FileType.fromFile(file.path)
+
+  if (mimetype == "application/octet-stream" && type) {
+    mimetype = type.mime
+  }
+
+  if (mimetype == "application/epub") {
+    mimetype = TYPE_EPUB
+  }
+
+  if ((!type || !allowedTypes.includes(type.mime)) && !allowedTypes.includes(mimetype)) {
+    throw new Error('Uploaded file is of an invalid type: ' + file.originalname + ' (' + (type? type.mime : 'unknown mimetype') + ')')
+  }
+
+  let data = null
+
+  if (mimetype === TYPE_EPUB && info.agent.includes('Kindle') && ctx.request.body.kindlegen) {
+    conversion = 'kindlegen'
+    const outname = file.path.replace(/\.epub$/i, '.mobi')
+    filename = filename.replace(/\.kepub\.epub$/i, '.epub').replace(/\.epub$/i, '.mobi')
+    let stderr = ''
+
+    let p = new Promise((resolve, reject) => {
+      const kindlegen = spawn('kindlegen', [basename(file.path), '-dont_append_source', '-c1', '-o', basename(outname)], {
+        cwd: dirname(file.path)
+      })
+      kindlegen.once('error', function (err) {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+          else console.log('Removed file', file.path)
+        })
+        fs.unlink(file.path.replace(/\.epub$/i, '.mobi8'), (err) => {
+          if (err) console.error(err)
+        })
+        reject('kindlegen error: ' + err)
+      })
+      kindlegen.once('close', (code) => {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+          else console.log('Removed file', file.path)
+        })
+        fs.unlink(file.path.replace(/\.epub$/i, '.mobi8'), (err) => {
+          if (err) console.error(err)
+        })
+        if (code !== 0 && code !== 1) {
+          reject('kindlegen error code: ' + code + '\n' + stderr)
+          return
+        }
+        resolve(outname)
+      })
+      kindlegen.stdout.on('data', function (str) {
+        stderr += str
+        console.log('kindlegen: ' + str)
+      })
+      kindlegen.stderr.on('data', function (str) {
+        stderr += str
+        console.log('kindlegen: ' + str)
+      })
+    })
+    data = await p
+
+  } else if (mimetype === TYPE_EPUB && info.agent.includes('Kobo') && ctx.request.body.kepubify) {
+    conversion = 'kepubify'
+    const outname = file.path.replace(/\.epub$/i, '.kepub.epub')
+    filename = filename.replace(/\.kepub\.epub$/i, '.epub').replace(/\.epub$/i, '.kepub.epub')
+
+    let p = new Promise((resolve, reject) => {
+      let stderr = ''
+      const kepubify = spawn('kepubify', ['-v', '-u', '-o', basename(outname), basename(file.path)], {
+        cwd: dirname(file.path)
+      })
+      kepubify.once('error', function (err) {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+          else console.log('Removed file', file.path)
+        })
+        reject('kepubify error: ' + err)
+      })
+      kepubify.once('close', (code) => {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error(err)
+          else console.log('Removed file', file.path)
+        })
+        if (code !== 0) {
+          reject('Kepubify error code: ' + code + '\n' + stderr)
+          return
+        }
+        resolve(outname)
+      })
+      kepubify.stdout.on('data', function (str) {
+        stderr += str
+        console.log('kepubify: ' + str)
+      })
+      kepubify.stderr.on('data', function (str) {
+        stderr += str
+        console.log('kepubify: ' + str)
+      })
+    })
+    data = await p
+
+  } else {
+    data = file.path
+    filename = filename.replace(/\.epub$/i, '.epub').replace(/\.pdf$/i, '.pdf')
+  }
+
+  return {
+    name: filename,
+    path: data,
+    uploaded: new Date(),
+    conversion: conversion
+  }
+}
 
 router.get('/:filename', downloadFile)
 
@@ -586,7 +523,7 @@ fs.rm('uploads', {recursive: true}, (err) => {
       console.log("check continue!")
       fn(req, res)
     })
-    server.listen(port)
+    server.listen(port, '0.0.0.0')
     console.log('server is listening on port ' + port)
   })
 })
