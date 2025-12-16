@@ -4,15 +4,14 @@ FROM docker.io/library/node:lts-alpine AS build
 # Create app directory
 WORKDIR /usr/src/app
 
-RUN apk add --no-cache pipx gcc g++ clang make pkgconf python3-dev
+RUN apk add --no-cache pipx gcc g++ make pkgconf python3-dev py3-pip
 
 ENV PATH="$PATH:/root/.local/bin"
 
-RUN pipx install pdfCropMargins
 
 FROM docker.io/library/node:lts-alpine as runtime
 
-# Copy pdfCropMargins install
+# Copy PyMuPDF install
 COPY --from=build /root/.local /root/.local
 
 RUN apk add --no-cache python3
