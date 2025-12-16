@@ -10,7 +10,7 @@ ENV PATH="$PATH:/root/.local/bin"
 
 FROM docker.io/library/node:lts-alpine as runtime
 
-RUN apk add --no-cache python3
+RUN apk add --no-cache python3 wget
 
 ENV PATH="$PATH:/root/.local/bin"
 
@@ -36,9 +36,6 @@ RUN npm install --omit=dev
 
 # Copy the rest of the app files (see .dockerignore)
 COPY . ./
-
-# Create uploads directory if it doesn't exist
-RUN mkdir uploads
 
 EXPOSE 3001
 

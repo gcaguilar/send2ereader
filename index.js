@@ -116,13 +116,22 @@ const upload = multer({
     file.originalname = sanitize(Buffer.from(file.originalname, 'latin1').toString('utf8'))
 
     console.log('Incoming file:', file)
+    
+    if (!req.body || !req.body.key) {
+      console.error('FileFilter: Missing key in request body')
+      cb("Missing key", false)
+      return
+    }
+    
     const key = req.body.key.toUpperCase()
     if (!app.context.keys.has(key)) {
       console.error('FileFilter: Unknown key: ' + key)
       cb("Unknown key " + key, false)
       return
     }
-    if ((!allowedTypes.includes(file.mimetype) && file.mimetype != "application/octet-stream") || !allowedExtensions.includes(extname(file.originalname.toLowerCase()).substring(1))) {
+    
+    const fileExt = extname(file.originalname).toLowerCase().substring(1)
+    if ((!allowedTypes.includes(file.mimetype) && file.mimetype != "application/octet-stream") || !allowedExtensions.includes(fileExt)) {
       console.error('FileFilter: File is of an invalid type ', file)
       cb("Invalid filetype: " + JSON.stringify(file), false)
       return
@@ -205,6 +214,8 @@ async function downloadFile (ctx, next) {
   }
   if (info.agent !== ctx.get('user-agent')) {
     console.error("User Agent doesnt match: " + info.agent + " VS " + ctx.get('user-agent'))
+    ctx.response.status = 403
+    ctx.body = 'Forbidden'
     return
   }
   expireKey(key)
@@ -233,6 +244,15 @@ router.post('/upload', async (ctx, next) => {
 
   ctx.res.writeContinue()
 
+  if (!ctx.request.body || !ctx.request.body.key) {
+    flash(ctx, {
+      message: 'Missing key',
+      success: false
+    })
+    await next()
+    return
+  }
+  
   const key = ctx.request.body.key.toUpperCase()
 
   if (ctx.request.files && ctx.request.files.length > 0) {
@@ -364,6 +384,8 @@ router.get('/status/:key', async ctx => {
   if (info.agent !== ctx.get('user-agent')) {
     // don't send this error to client
     console.error("User Agent doesnt match: " + info.agent + " VS " + ctx.get('user-agent'))
+    ctx.response.status = 403
+    ctx.body = {error: 'Forbidden'}
     return
   }
   expireKey(key)
@@ -519,7 +541,7 @@ app.use(router.allowedMethods())
 
 
 fs.rm('uploads', {recursive: true}, (err) => {
-  if (err) throw err
+  if (err && err.code !== 'ENOENT') throw err
   mkdirp('uploads').then (() => {
     // app.listen(port)
     const fn = app.callback()
