@@ -348,6 +348,11 @@ router.delete('/file/:key/:filename', async ctx => {
   ctx.body = 'ok'
 })
 
+router.get('/health', async ctx => {
+  ctx.response.status = 200
+  ctx.body = { status: 'ok', timestamp: new Date().toISOString() }
+})
+
 router.get('/status/:key', async ctx => {
   const key = ctx.params.key.toUpperCase()
   const info = ctx.keys.get(key)
