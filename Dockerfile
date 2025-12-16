@@ -4,7 +4,7 @@ FROM docker.io/library/node:lts-alpine AS build
 # Create app directory
 WORKDIR /usr/src/app
 
-RUN apk add --no-cache gcc g++ make pkgconf
+RUN apk add --no-cache gcc g++ make pkgconf wget
 
 ENV PATH="$PATH:/root/.local/bin"
 
