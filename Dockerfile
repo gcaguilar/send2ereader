@@ -4,7 +4,7 @@ FROM docker.io/library/node:lts-alpine AS build
 # Create app directory
 WORKDIR /usr/src/app
 
-RUN apk add --no-cache pipx gcc g++ make pkgconf python3-dev
+RUN apk add --no-cache pipx gcc g++ clang make pkgconf python3-dev
 
 ENV PATH="$PATH:/root/.local/bin"
 
