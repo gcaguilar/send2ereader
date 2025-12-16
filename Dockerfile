@@ -1,5 +1,4 @@
-# node 20 is lts at the time of writing
-FROM docker.io/library/node:lts-alpine AS build
+FROM docker.io/library/node:22-alpine AS build
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -8,7 +7,7 @@ RUN apk add --no-cache gcc g++ make pkgconf wget
 
 ENV PATH="$PATH:/root/.local/bin"
 
-FROM docker.io/library/node:lts-alpine as runtime
+FROM docker.io/library/node:22-alpine as runtime
 
 RUN apk add --no-cache python3 wget
 
