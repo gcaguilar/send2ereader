@@ -1,8 +1,8 @@
 function detect(userAgent) {
-  const isKindle = userAgent.includes("Kindle");
-  const isKobo = userAgent.includes("Kobo");
-  const isTolino = userAgent.toLowerCase().includes("tolino");
-  const isEReader = userAgent.includes("eReader");
+  const isKindle = (userAgent || "").includes("Kindle");
+  const isKobo = (userAgent || "").includes("Kobo");
+  const isTolino = (userAgent || "").toLowerCase().includes("tolino");
+  const isEReader = (userAgent || "").includes("eReader");
 
   const isEreader = isKindle || isKobo || isTolino || isEReader;
 
