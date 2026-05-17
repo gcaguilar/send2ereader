@@ -1,23 +1,21 @@
-const multer = require("@koa/multer");
+const multer = require("multer");
 const fs = require("fs");
-const { extname } = require("path");
+const { extname, join } = require("path");
 const { allowedTypes, allowedExtensions, maxFileSize, TYPE_EPUB, TYPE_MOBI } = require("./config");
 const { processFile } = require("./file-processor");
 
-function getKeyFromRequest(req, ctx) {
+function getKeyFromRequest(req) {
   const hdr = req.headers["x-upload-key"];
   if (typeof hdr === "string" && hdr.trim()) return hdr.trim().toUpperCase();
 
-  if (ctx && ctx.query && typeof ctx.query.key === "string" && ctx.query.key.trim()) {
-    return ctx.query.key.trim().toUpperCase();
+  if (req.query && typeof req.query.key === "string" && req.query.key.trim()) {
+    return req.query.key.trim().toUpperCase();
   }
 
   const bodyKey =
-    ctx &&
-    ctx.request &&
-    ctx.request.body &&
-    typeof ctx.request.body.key === "string"
-      ? ctx.request.body.key
+    req.body &&
+    typeof req.body.key === "string"
+      ? req.body.key
       : null;
 
   if (bodyKey && bodyKey.trim()) return bodyKey.trim().toUpperCase();
@@ -25,13 +23,13 @@ function getKeyFromRequest(req, ctx) {
   return null;
 }
 
-function flash(ctx, data) {
-  ctx.response.status = data.success ? 200 : 400;
-  if (!data.success) ctx.set("Connection", "close");
-  ctx.body = data.message;
+function flash(res, data) {
+  res.status(data.success ? 200 : 400);
+  if (!data.success) res.set("Connection", "close");
+  res.send(data.message);
 }
 
-function createMulterMiddleware(config) {
+function createMulterMiddleware(config, sessionStore) {
   const { maxFileSize, allowedTypes, allowedExtensions } = config;
 
   return multer({
@@ -61,7 +59,7 @@ function createMulterMiddleware(config) {
         return cb(new Error("Missing key. Send x-upload-key header (recommended)."), false);
       }
 
-      if (!req.keys.has(key)) {
+      if (!sessionStore.hasSession(key)) {
         return cb(new Error("Unknown key " + key), false);
       }
 
@@ -80,34 +78,31 @@ function sanitize(filename) {
   return sanitize(Buffer.from(filename, "latin1").toString("utf8"));
 }
 
-async function handleUpload(ctx, next, sessionStore, fileProcessorModule, config, converter) {
-  const upload = createMulterMiddleware(config);
+async function handleUpload(req, res, sessionStore, fileProcessorModule, config, converter) {
+  const upload = createMulterMiddleware(config, sessionStore);
 
   try {
-    await upload.array("files", 10)(ctx, () => {});
+    await upload.array("files", 10)(req, res, () => {});
   } catch (err) {
-    flash(ctx, { message: String(err?.message || err), success: false });
-    await next();
+    flash(res, { message: String(err?.message || err), success: false });
     return;
   }
 
-  const key = getKeyFromRequest(ctx.req, ctx);
+  const key = getKeyFromRequest(req);
 
   if (!key) {
-    if (ctx.request.files?.length) {
-      for (const f of ctx.request.files) fs.unlink(f.path, () => {});
+    if (req.files?.length) {
+      for (const f of req.files) fs.unlink(f.path, () => {});
     }
-    flash(ctx, { message: "Missing key (send x-upload-key header).", success: false });
-    await next();
+    flash(res, { message: "Missing key (send x-upload-key header).", success: false });
     return;
   }
 
   if (!sessionStore.hasSession(key)) {
-    if (ctx.request.files?.length) {
-      for (const f of ctx.request.files) fs.unlink(f.path, () => {});
+    if (req.files?.length) {
+      for (const f of req.files) fs.unlink(f.path, () => {});
     }
-    flash(ctx, { message: "Unknown key " + key, success: false });
-    await next();
+    flash(res, { message: "Unknown key " + key, success: false });
     return;
   }
 
@@ -115,23 +110,23 @@ async function handleUpload(ctx, next, sessionStore, fileProcessorModule, config
   sessionStore.expireSession(key);
 
   let url = null;
-  if (ctx.request.body?.url) {
-    url = String(ctx.request.body.url).trim();
+  if (req.body?.url) {
+    url = String(req.body.url).trim();
     if (url.length > 0 && !session.urls.includes(url)) session.urls.push(url);
   }
 
   const messages = [];
   const processedFiles = [];
 
-  if (ctx.request.files?.length) {
-    for (const file of ctx.request.files) {
+  if (req.files?.length) {
+    for (const file of req.files) {
       if (file.size === 0) {
         fs.unlink(file.path, () => {});
         continue;
       }
 
       try {
-        const processedFile = await processFile(file, session, ctx.request.body, config, spawnFn);
+        const processedFile = await processFile(file, session, req.body, config, spawnFn);
         processedFiles.push(processedFile);
         session.files.push(processedFile);
         messages.push("✓ " + processedFile.name + (processedFile.conversion ? " (converted with " + processedFile.conversion + ")" : ""));
@@ -146,8 +141,7 @@ async function handleUpload(ctx, next, sessionStore, fileProcessorModule, config
   if (url) messages.push("✓ Added url: " + url);
 
   if (messages.length === 0) {
-    flash(ctx, { message: "No file or url selected", success: false });
-    await next();
+    flash(res, { message: "No file or url selected", success: false });
     return;
   }
 
@@ -156,14 +150,12 @@ async function handleUpload(ctx, next, sessionStore, fileProcessorModule, config
       ? `Upload successful! ${processedFiles.length} file(s) received:<br/>`
       : "";
 
-  flash(ctx, {
+  flash(res, {
     message: successMsg + messages.join("<br/>"),
     success: true,
     key,
     url,
   });
-
-  await next();
 }
 
 module.exports = { handleUpload, getKeyFromRequest, flash };
