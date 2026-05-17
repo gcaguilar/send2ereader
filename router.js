@@ -1,23 +1,23 @@
-const Router = require("@koa/router");
-const sendfile = require("koa-sendfile");
+const express = require("express");
 
 function createRouter(sessionStore, config, converter) {
-  const router = new Router();
+  const router = express.Router();
   const { maxExpireDuration, expireDelay, keyChars, keyLength } = config;
 
-  router.post("/generate", async (ctx) => {
-    const agent = ctx.get("user-agent");
+  router.post("/generate", (req, res) => {
+    const path = require("path");
+    const agent = req.get("User-Agent");
 
     let key = null;
     let attempts = 0;
     console.log("There are currently", sessionStore.size, "key(s) in use.");
-    console.log("Generating unique key...", ctx.ip, agent);
+    console.log("Generating unique key...", req.ip, agent);
 
     do {
       key = sessionStore.generateKey(keyChars, keyLength);
       if (attempts >= sessionStore.size) {
         console.error("Can't generate more keys, map is full.", attempts, sessionStore.size);
-        ctx.body = "error";
+        res.status(500).send("error");
         return;
       }
       attempts++;
@@ -41,65 +41,62 @@ function createRouter(sessionStore, config, converter) {
       if (sessionStore.getSession(key) === info) sessionStore.removeSession(key);
     }, maxExpireDuration * 1000);
 
-    ctx.cookies.set("key", key, { overwrite: true, httpOnly: false, sameSite: "strict", maxAge: expireDelay * 1000 });
-    ctx.body = key;
+    res.cookie("key", key, { overwrite: true, httpOnly: false, sameSite: "strict", maxAge: expireDelay * 1000 });
+    res.status(200).send(key);
   });
 
-  router.get("/health", async (ctx) => {
-    ctx.response.status = 200;
-    ctx.body = { status: "ok", timestamp: new Date().toISOString() };
+  router.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  router.get("/status/:key", async (ctx) => {
-    const key = ctx.params.key.toUpperCase();
+  router.get("/status/:key", (req, res) => {
+    const key = req.params.key.toUpperCase();
     const session = sessionStore.getSession(key);
 
     if (!session) {
-      ctx.response.status = 404;
-      ctx.body = { error: "Unknown key" };
+      res.status(404).json({ error: "Unknown key" });
       return;
     }
 
-    if (session.agent !== ctx.get("user-agent")) {
-      console.error("User Agent doesnt match: " + session.agent + " VS " + ctx.get("user-agent"));
-      ctx.response.status = 403;
-      ctx.body = { error: "Forbidden" };
+    if (session.agent !== req.get("User-Agent")) {
+      console.error("User Agent doesnt match: " + session.agent + " VS " + req.get("User-Agent"));
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
 
     sessionStore.expireSession(key);
-    ctx.body = {
+    res.status(200).json({
       alive: session.alive,
       files: session.files ? session.files.map((f) => ({ name: f.name })) : [],
       urls: session.urls,
-    };
+    });
   });
 
-  router.post("/upload", async (ctx, next) => {
+  router.post("/upload", async (req, res, next) => {
     const { handleUpload } = require("./upload-handler");
     const { processFile } = require("./file-processor");
-    await handleUpload(ctx, next, sessionStore, processFile, config, converter);
+    await handleUpload(req, res, sessionStore, processFile, config, converter);
   });
 
   const { handleDownloadFile, handleDeleteFile } = require("./download-handler");
 
-  router.delete("/file/:key/:filename", async (ctx) => {
-    await handleDeleteFile(ctx, null, sessionStore);
+  router.delete("/file/:key/:filename", (req, res) => {
+    handleDeleteFile(req, res, sessionStore);
   });
 
-  router.get("/receive", async (ctx) => {
-    await sendfile(ctx, "static/download.html");
+  router.get("/receive", (req, res) => {
+    res.sendFile(path.join(__dirname, "static", "download.html"));
   });
 
-  router.get("/", async (ctx) => {
-    const agent = ctx.get("user-agent");
+  router.get("/", (req, res) => {
+    const agent = req.get("User-Agent");
     const device = require("./device-detector").detect(agent);
     const page = device.pageType === "download" ? "static/download.html" : "static/upload.html";
-    await sendfile(ctx, page);
+    res.sendFile(require("path").join(__dirname, page));
   });
 
-  router.get("/:filename", async (ctx, next) => {
-    await handleDownloadFile(ctx, next, sessionStore);
+  router.get("/:filename", (req, res, next) => {
+    handleDownloadFile(req, res, sessionStore);
   });
 
   return router;
