@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { randomInt } = require("crypto");
 
 function create(keysMap, config) {
   const { expireDelay } = config;
@@ -36,7 +37,7 @@ function create(keysMap, config) {
 
   function generateKey(keyChars, keyLength) {
     const choices = Math.pow(keyChars.length, keyLength);
-    const rnd = Math.floor(Math.random() * choices);
+    const rnd = randomInt(choices);
 
     return rnd
       .toString(keyChars.length)
