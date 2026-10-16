@@ -1,14 +1,15 @@
+const path = require("path");
 const { allowedTypes, allowedExtensions } = require("./config");
 
 async function handleDownloadFile(req, res, sessionStore) {
   const key = req.query.key ? String(req.query.key).toUpperCase() : null;
-  if (!key) return;
+  if (!key) return res.status(400).send("Missing key");
 
   const filename = decodeURIComponent(req.params.filename);
   const session = sessionStore.getSession(key);
   const file = session?.files ? session.files.find((f) => f.name === filename) : null;
 
-  if (!session || !file) return;
+  if (!session || !file) return res.status(404).send("Not found");
 
   if (session.agent !== req.get("User-Agent")) {
     console.error("User Agent doesnt match: " + session.agent + " VS " + req.get("User-Agent"));
@@ -19,7 +20,7 @@ async function handleDownloadFile(req, res, sessionStore) {
   sessionStore.expireSession(key);
   const device = require("./device-detector").detect(session.agent);
   if (device.isKindle) res.attachment(file.name);
-  res.sendFile(file.path);
+  res.sendFile(path.resolve(file.path));
 }
 
 async function handleDeleteFile(req, res, sessionStore) {
