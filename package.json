@@ -4,7 +4,8 @@
   "description": "Send ebooks to Kobo/Kindle ereaders easily",
   "main": "index.js",
   "scripts": {
-    "start": "node index"
+    "start": "node index",
+    "test": "node --test"
   },
   "author": "djazz",
   "license": "MIT",
