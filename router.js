@@ -15,7 +15,7 @@ function createRouter(sessionStore, config, converter) {
 
     do {
       key = sessionStore.generateKey(keyChars, keyLength);
-      if (attempts >= sessionStore.size) {
+      if (attempts > sessionStore.size) {
         console.error("Can't generate more keys, map is full.", attempts, sessionStore.size);
         res.status(500).send("error");
         return;
