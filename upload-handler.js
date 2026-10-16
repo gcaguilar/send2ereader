@@ -136,7 +136,7 @@ async function handleUpload(req, res, sessionStore, config, converter, upload) {
       } catch (err) {
         console.error("Error processing file:", file.originalname, err);
         messages.push("✗ Error processing " + file.originalname + ": " + String(err?.message || err));
-        fs.unlink(file.path, () => {});
+        if (file.path) fs.unlink(file.path, () => {});
       }
     }
   }

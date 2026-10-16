@@ -4,7 +4,9 @@ async function handleDownloadFile(req, res, sessionStore) {
   const key = req.query.key ? String(req.query.key).toUpperCase() : null;
   if (!key) return res.status(400).send("Missing key");
 
-  const filename = decodeURIComponent(req.params.filename);
+  // req.params values are already URL-decoded by Express; decoding again
+  // would corrupt names containing a literal "%" and can throw URIError.
+  const filename = req.params.filename;
   const session = sessionStore.getSession(key);
   const file = session?.files ? session.files.find((f) => f.name === filename) : null;
 
@@ -24,7 +26,7 @@ async function handleDownloadFile(req, res, sessionStore) {
 
 async function handleDeleteFile(req, res, sessionStore) {
   const key = req.params.key.toUpperCase();
-  const filename = decodeURIComponent(req.params.filename);
+  const filename = req.params.filename;
   const session = sessionStore.getSession(key);
 
   if (!session) {

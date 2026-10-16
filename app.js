@@ -22,6 +22,12 @@ function createApp(config, converter) {
   app.use(express.static(path.join(__dirname, "static")));
   app.use(router);
 
+  app.use((err, req, res, next) => {
+    console.error(err);
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).send(String(err?.message || "Internal Server Error"));
+  });
+
   return { app };
 }
 
