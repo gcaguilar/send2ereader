@@ -1,12 +1,38 @@
 const express = require("express");
+const path = require("path");
 
 function createRouter(sessionStore, config, converter) {
   const router = express.Router();
-  const { maxExpireDuration, expireDelay, keyChars, keyLength } = config;
+  const { maxKeys, generateRateLimitMax, generateRateLimitWindowMs, maxExpireDuration, expireDelay, keyChars, keyLength } = config;
+
+  // Simple in-memory per-IP rate limiter for key generation.
+  const generateHits = new Map();
+
+  function isGenerateRateLimited(ip) {
+    const now = Date.now();
+    const hits = (generateHits.get(ip) || []).filter((t) => now - t < generateRateLimitWindowMs);
+    if (hits.length >= generateRateLimitMax) {
+      generateHits.set(ip, hits);
+      return true;
+    }
+    hits.push(now);
+    generateHits.set(ip, hits);
+    return false;
+  }
 
   router.post("/generate", (req, res) => {
-    const path = require("path");
     const agent = req.get("User-Agent");
+
+    if (isGenerateRateLimited(req.ip)) {
+      res.status(429).send("Too many requests");
+      return;
+    }
+
+    if (sessionStore.size >= maxKeys) {
+      console.error("Session limit reached, refusing to generate more keys.", sessionStore.size);
+      res.status(429).send("Too many sessions");
+      return;
+    }
 
     let key = null;
     let attempts = 0;

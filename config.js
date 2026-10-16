@@ -1,4 +1,7 @@
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
+const maxKeys = process.env.MAX_KEYS ? Number(process.env.MAX_KEYS) : 1000;
+const generateRateLimitMax = process.env.GENERATE_RATE_LIMIT ? Number(process.env.GENERATE_RATE_LIMIT) : 10;
+const generateRateLimitWindowMs = 60 * 1000; // 1 minute
 
 const expireDelay = 10 * 60; // seconds
 const maxExpireDuration = 1 * 60 * 60; // 1 hour
@@ -25,6 +28,9 @@ const keyLength = 4;
 
 module.exports = {
   port,
+  maxKeys,
+  generateRateLimitMax,
+  generateRateLimitWindowMs,
   expireDelay,
   maxExpireDuration,
   maxFileSize,
