@@ -17,7 +17,7 @@
                     <label for="keyinput"><strong>Unique key</strong></label>
                 </td>
                 <td>
-                    <input type="text" name="key" id="keyinput" autocomplete="off" pattern="...." placeholder="––––" required style="text-transform: uppercase;" maxlength=4/>
+                    <input type="text" name="key" id="keyinput" autocomplete="off" pattern="......" placeholder="––––––" required style="text-transform: uppercase;" maxlength=6/>
                 </td>
             </tr>
             <tr>
@@ -170,7 +170,7 @@ if (isIOS) {
 function normalizeKey(k) {
     if (!k) return null
     k = String(k).trim().toUpperCase()
-    if (!/^[0-9A-Z]{4}$/.test(k)) return null
+    if (!/^[0-9A-Z]{6}$/.test(k)) return null
     return k
 }
 
@@ -180,7 +180,7 @@ uploadform.addEventListener('submit', function (e) {
 
     var key = normalizeKey(keyinput.value)
     if (!key) {
-        handleFlash({ success: false, message: "Invalid key (must be 4 characters)." })
+        handleFlash({ success: false, message: "Invalid key (must be 6 characters)." })
         return false
     }
 

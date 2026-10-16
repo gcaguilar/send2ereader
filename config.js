@@ -24,7 +24,7 @@ const allowedTypes = [
 const allowedExtensions = ["epub", "mobi", "pdf", "cbz", "cbr", "html", "txt"];
 
 const keyChars = "23456789ACDEFGHJKLMNPRSTUVWXYZ";
-const keyLength = 4;
+const keyLength = 6;
 
 module.exports = {
   port,
