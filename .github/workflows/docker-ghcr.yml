@@ -1,10 +1,28 @@
 name: Build and Push to GHCR
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch: # Enables manual triggering from the GitHub Actions UI
 
 jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+    - name: Install dependencies
+      run: npm ci
+    - name: Run tests
+      run: npm test
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -35,6 +53,7 @@ jobs:
         labels: |
           org.opencontainers.image.description=Quick start: docker run -d -p 3001:3001 --name send2ereader ghcr.io/${{ github.repository }}:latest
 
+    # kindlegen is a 32-bit x86 binary, so the image only targets amd64.
     - name: Build and push Docker image
       uses: docker/build-push-action@v7
       with:

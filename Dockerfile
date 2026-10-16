@@ -1,24 +1,27 @@
-FROM docker.io/library/node:22-alpine AS build
+FROM docker.io/library/node:22-slim
 
-# Create app directory
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        wget \
+    && dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libc6:i386 \
+        libstdc++6:i386 \
+        zlib1g:i386 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="$PATH:/root/.local/bin"
+
 WORKDIR /usr/src/app
-
-RUN apk add --no-cache gcc g++ make pkgconf wget
-
-ENV PATH="$PATH:/root/.local/bin"
-
-FROM docker.io/library/node:22-alpine as runtime
-
-RUN apk add --no-cache python3 wget
-
-ENV PATH="$PATH:/root/.local/bin"
 
 # Download and install kepubify
 RUN wget https://github.com/pgaskin/kepubify/releases/download/v4.0.4/kepubify-linux-64bit && \
     mv kepubify-linux-64bit /usr/local/bin/kepubify && \
     chmod +x /usr/local/bin/kepubify
 
-# Download and install kindlegen
+# Download and install kindlegen (a 32-bit x86 binary, hence the i386 libs above)
 RUN wget https://github.com/zzet/fp-docker/raw/f2b41fb0af6bb903afd0e429d5487acc62cb9df8/kindlegen_linux_2.6_i386_v2_9.tar.gz && \
     echo "9828db5a2c8970d487ada2caa91a3b6403210d5d183a7e3849b1b206ff042296 kindlegen_linux_2.6_i386_v2_9.tar.gz" | sha256sum -c && \
     mkdir kindlegen && \
