@@ -63,9 +63,10 @@ function createRouter(sessionStore, config, converter) {
     sessionStore.setSession(key, info);
     sessionStore.expireSession(key);
 
-    setTimeout(() => {
+    const hardTimeout = setTimeout(() => {
       if (sessionStore.getSession(key) === info) sessionStore.removeSession(key);
     }, maxExpireDuration * 1000);
+    hardTimeout.unref();
 
     res.cookie("key", key, { overwrite: true, httpOnly: false, sameSite: "strict", maxAge: expireDelay * 1000 });
     res.status(200).send(key);

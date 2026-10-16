@@ -27,6 +27,7 @@ function create(keysMap, config) {
   function expireSession(key) {
     const info = keysMap.get(key);
     const timer = setTimeout(removeSession, expireDelay * 1000, key);
+    timer.unref();
     if (info) {
       clearTimeout(info.timer);
       info.timer = timer;
