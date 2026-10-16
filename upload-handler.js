@@ -82,7 +82,12 @@ async function handleUpload(req, res, sessionStore, fileProcessorModule, config,
   const upload = createMulterMiddleware(config, sessionStore);
 
   try {
-    await upload.array("files", 10)(req, res, () => {});
+    await new Promise((resolve, reject) => {
+      upload.array("files", 10)(req, res, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
   } catch (err) {
     flash(res, { message: String(err?.message || err), success: false });
     return;
@@ -126,7 +131,7 @@ async function handleUpload(req, res, sessionStore, fileProcessorModule, config,
       }
 
       try {
-        const processedFile = await processFile(file, session, req.body, config, spawnFn);
+        const processedFile = await processFile(file, session, req.body, config, converter);
         processedFiles.push(processedFile);
         session.files.push(processedFile);
         messages.push("✓ " + processedFile.name + (processedFile.conversion ? " (converted with " + processedFile.conversion + ")" : ""));

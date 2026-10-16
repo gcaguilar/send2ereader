@@ -1,7 +1,7 @@
 const fs = require("fs");
 const { spawn } = require("child_process");
 const { extname, basename, dirname } = require("path");
-const FileType = require("file-type");
+const { fileTypeFromFile } = require("file-type");
 const { transliterate } = require("transliteration");
 const sanitize = require("sanitize-filename");
 
@@ -84,7 +84,7 @@ async function processFile(file, session, options, config, converter) {
   }
 
   let mimetype = file.mimetype;
-  const type = await FileType.fromFile(file.path);
+  const type = await fileTypeFromFile(file.path);
 
   if (mimetype === "application/octet-stream" && type) mimetype = config.TYPE_EPUB;
   if (mimetype === "application/epub") mimetype = config.TYPE_EPUB;
