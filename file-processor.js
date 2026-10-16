@@ -36,9 +36,21 @@ function createChildProcessAdapter() {
 
   return {
     async convert(tool, inputPath, cwd, filePath) {
-      const outname = inputPath.replace(/\.epub$/i, ".mobi");
-      await spawnConversion(tool, [basename(inputPath), "-dont_append_source", "-c1", "-o", basename(outname)], cwd, filePath);
-      return { outputPath: outname };
+      const inputName = basename(inputPath);
+
+      if (tool === "kindlegen") {
+        const outname = inputPath.replace(/\.epub$/i, ".mobi");
+        await spawnConversion("kindlegen", [inputName, "-dont_append_source", "-c1", "-o", basename(outname)], cwd, filePath);
+        return { outputPath: outname };
+      }
+
+      if (tool === "kepubify") {
+        const outname = inputPath.replace(/\.epub$/i, ".kepub.epub");
+        await spawnConversion("kepubify", ["-v", "-u", "-o", basename(outname), inputName], cwd, filePath);
+        return { outputPath: outname };
+      }
+
+      throw new Error("Unknown conversion tool: " + tool);
     },
   };
 }
@@ -100,14 +112,12 @@ async function processFile(file, session, options, config, converter) {
 
   if (mimetype === TYPE_EPUB && device.isKindle && kindlegen) {
     conversion = "kindlegen";
-    const outname = file.path.replace(/\.epub$/i, ".mobi");
     filename = filename.replace(/\.kepub\.epub$/i, ".epub").replace(/\.epub$/i, ".mobi");
 
     const result = await converter.convert("kindlegen", file.path, dirname(file.path), file.path);
     data = result.outputPath;
   } else if (mimetype === TYPE_EPUB && device.isKobo && kepubify) {
     conversion = "kepubify";
-    const outname = file.path.replace(/\.epub$/i, ".kepub.epub");
     filename = filename.replace(/\.kepub\.epub$/i, ".epub").replace(/\.epub$/i, ".kepub.epub");
 
     const result = await converter.convert("kepubify", file.path, dirname(file.path), file.path);
