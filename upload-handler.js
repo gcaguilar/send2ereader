@@ -1,7 +1,7 @@
 const multer = require("multer");
 const fs = require("fs");
-const { extname, join } = require("path");
-const { allowedTypes, allowedExtensions, maxFileSize, TYPE_EPUB, TYPE_MOBI } = require("./config");
+const { extname } = require("path");
+const { allowedTypes, allowedExtensions, maxFileSize } = require("./config");
 const { processFile } = require("./file-processor");
 
 function getKeyFromRequest(req) {
@@ -78,9 +78,7 @@ function sanitize(filename) {
   return sanitize(Buffer.from(filename, "latin1").toString("utf8"));
 }
 
-async function handleUpload(req, res, sessionStore, fileProcessorModule, config, converter) {
-  const upload = createMulterMiddleware(config, sessionStore);
-
+async function handleUpload(req, res, sessionStore, config, converter, upload) {
   try {
     await new Promise((resolve, reject) => {
       upload.array("files", 10)(req, res, (err) => {
@@ -163,4 +161,4 @@ async function handleUpload(req, res, sessionStore, fileProcessorModule, config,
   });
 }
 
-module.exports = { handleUpload, getKeyFromRequest, flash };
+module.exports = { handleUpload, getKeyFromRequest, flash, createMulterMiddleware };

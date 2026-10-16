@@ -1,5 +1,4 @@
 const path = require("path");
-const { allowedTypes, allowedExtensions } = require("./config");
 
 async function handleDownloadFile(req, res, sessionStore) {
   const key = req.query.key ? String(req.query.key).toUpperCase() : null;

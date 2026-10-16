@@ -98,10 +98,11 @@ function createRouter(sessionStore, config, converter) {
     });
   });
 
+  const { handleUpload, createMulterMiddleware } = require("./upload-handler");
+  const upload = createMulterMiddleware(config, sessionStore);
+
   router.post("/upload", async (req, res, next) => {
-    const { handleUpload } = require("./upload-handler");
-    const { processFile } = require("./file-processor");
-    await handleUpload(req, res, sessionStore, processFile, config, converter);
+    await handleUpload(req, res, sessionStore, config, converter, upload);
   });
 
   const { handleDownloadFile, handleDeleteFile } = require("./download-handler");

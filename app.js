@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const logger = require("morgan");
 const { mkdirp } = require("mkdirp");
 const fs = require("fs");
@@ -18,7 +19,7 @@ function createApp(config, converter) {
 
   const router = createRouter(sessionStore, config, converter);
 
-  app.use(express.static("static"));
+  app.use(express.static(path.join(__dirname, "static")));
   app.use(router);
 
   return { app };
